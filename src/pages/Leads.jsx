@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
 const columnsAI = [
   'Name','Phone Number','Email ID','City','State','Lead Contact Time','Lead Source','Contact Purpose','Responses From','Responses to User by Bot','Lead Owner','Lead Owner Remarks','Next Action'
@@ -23,25 +23,48 @@ const sampleRows = new Array(12).fill(0).map((_, i) => ({
   'Template Send Count': Math.floor(Math.random()*5)+1,
 }))
 
-const FilterPanel = ({ title, items, onApply, onClear }) => {
+const Select = ({ label, value, onChange, options }) => {
+  return (
+    <div className="space-y-1">
+      <div className="text-xs font-medium text-slate-600">{label}</div>
+      <select
+        value={value ?? ''}
+        onChange={(e)=>onChange(e.target.value || undefined)}
+        className="w-full h-9 border border-slate-200 rounded px-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+      >
+        <option value="">All</option>
+        {options.map(opt => (
+          <option key={opt} value={opt}>{opt}</option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
+const FilterPanel = ({ title, fields, selections, setSelections, optionsMap }) => {
   const [q, setQ] = useState('')
+  const shown = useMemo(() => fields.filter(f => f.toLowerCase().includes(q.toLowerCase())), [fields, q])
+
   return (
     <aside className="w-72 shrink-0 bg-white border border-slate-200 rounded-md shadow-sm h-fit sticky top-20">
       <div className="p-4 border-b">
         <div className="text-sm font-medium text-slate-800">{title}</div>
         <input value={q} onChange={(e)=>setQ(e.target.value)} placeholder="Search" className="mt-3 w-full h-9 border border-slate-200 rounded px-3 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500" />
       </div>
-      <div className="max-h-80 overflow-auto p-3 space-y-2">
-        {items.filter(i=>i.toLowerCase().includes(q.toLowerCase())).map((i)=> (
-          <label key={i} className="flex items-center gap-2 text-sm text-slate-700">
-            <input type="checkbox" className="h-4 w-4 rounded border-slate-300" />
-            {i}
-          </label>
+      <div className="max-h-96 overflow-auto p-3 space-y-3">
+        {shown.map((field)=> (
+          <Select
+            key={field}
+            label={field}
+            value={selections[field]}
+            onChange={(val)=>setSelections(prev=>({ ...prev, [field]: val }))}
+            options={optionsMap[field] || []}
+          />
         ))}
       </div>
       <div className="p-3 border-t flex gap-2">
-        <button onClick={onApply} className="h-9 px-3 rounded bg-sky-600 text-white text-sm">Apply Filter</button>
-        <button onClick={onClear} className="h-9 px-3 rounded border text-slate-700 text-sm">Clear</button>
+        <button onClick={()=>{}} className="h-9 px-3 rounded bg-sky-600 text-white text-sm">Apply Filter</button>
+        <button onClick={()=>setSelections({})} className="h-9 px-3 rounded border text-slate-700 text-sm">Clear</button>
       </div>
     </aside>
   )
@@ -80,11 +103,47 @@ const Table = ({ columns, rows }) => {
   )
 }
 
+const buildOptions = (rows, fields) => {
+  const map = {}
+  fields.forEach(f => { map[f] = [] })
+  rows.forEach(r => {
+    fields.forEach(f => {
+      // Map display field to actual key when needed
+      const key = f === 'Responses to User by Bot (Template Name)' ? 'Responses to User by Bot' : f
+      const val = r[key]
+      if (val !== undefined && !map[f].includes(val)) map[f].push(val)
+    })
+  })
+  // Sort options for a tidy UI
+  Object.keys(map).forEach(k => map[k].sort())
+  return map
+}
+
+const applySelections = (rows, selections) => {
+  const activeKeys = Object.keys(selections).filter(k => selections[k])
+  if (activeKeys.length === 0) return rows
+  return rows.filter(r => {
+    return activeKeys.every(field => {
+      const key = field === 'Responses to User by Bot (Template Name)' ? 'Responses to User by Bot' : field
+      return r[key] === selections[field]
+    })
+  })
+}
+
 const Leads = () => {
   const [tab, setTab] = useState('AI')
 
-  const aiFilters = ['City','State','Lead Contact Time','Lead Source','Contact Purpose','Lead Owner','Next Action']
-  const menuFilters = ['City','State','Lead Contact Time','Lead Source','Contact Purpose','Responses to User by Bot (Template Name)','Lead Owner']
+  const aiFields = ['City','State','Lead Contact Time','Lead Source','Contact Purpose','Lead Owner','Next Action']
+  const menuFields = ['City','State','Lead Contact Time','Lead Source','Contact Purpose','Responses to User by Bot (Template Name)','Lead Owner']
+
+  const [aiSelections, setAiSelections] = useState({})
+  const [menuSelections, setMenuSelections] = useState({})
+
+  const aiOptions = useMemo(()=>buildOptions(sampleRows, aiFields), [])
+  const menuOptions = useMemo(()=>buildOptions(sampleRows, menuFields), [])
+
+  const aiRows = useMemo(()=>applySelections(sampleRows, aiSelections), [aiSelections])
+  const menuRows = useMemo(()=>applySelections(sampleRows, menuSelections), [menuSelections])
 
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-4">
@@ -96,13 +155,25 @@ const Leads = () => {
       <div className="flex items-start gap-4">
         {tab==='AI' ? (
           <>
-            <FilterPanel title="Filter Leads By" items={aiFilters} onApply={()=>{}} onClear={()=>{}} />
-            <Table columns={columnsAI} rows={sampleRows} />
+            <FilterPanel
+              title="Filter Leads By"
+              fields={aiFields}
+              selections={aiSelections}
+              setSelections={setAiSelections}
+              optionsMap={aiOptions}
+            />
+            <Table columns={columnsAI} rows={aiRows} />
           </>
         ) : (
           <>
-            <FilterPanel title="Filter Leads By" items={menuFilters} onApply={()=>{}} onClear={()=>{}} />
-            <Table columns={columnsMenu} rows={sampleRows} />
+            <FilterPanel
+              title="Filter Leads By"
+              fields={menuFields}
+              selections={menuSelections}
+              setSelections={setMenuSelections}
+              optionsMap={menuOptions}
+            />
+            <Table columns={columnsMenu} rows={menuRows} />
           </>
         )}
       </div>
